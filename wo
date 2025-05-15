@@ -1,40 +1,41 @@
-
-# Filter tasks that entered in-progress
 df['First_In_Progress'] = pd.to_datetime(df['First_In_Progress'])
 df['Done'] = pd.to_datetime(df['Done'])
 in_progress_df = df[df['First_In_Progress'].notna()].copy()
 
-# Ensure stage columns are numeric
+# Convert all stage durations to numeric
 in_progress_df[stage_cols] = in_progress_df[stage_cols].apply(pd.to_numeric, errors='coerce')
 
-# Exclude tasks that were completed immediately after being started
+# Exclude tasks that completed instantly
 instant_closed = (in_progress_df['Done'] - in_progress_df['First_In_Progress']).dt.total_seconds().abs() < 60
 in_progress_df.loc[instant_closed, stage_cols] = np.nan
 
-# Identify longest stage duration and its label
-in_progress_df['max_stage_duration'] = in_progress_df[stage_cols].max(axis=1)
-in_progress_df['bottleneck_stage'] = in_progress_df[stage_cols].idxmax(axis=1)
+# Exclude any 'Backlog to ...' transitions
+execution_stage_cols = [col for col in stage_cols if not col.lower().startswith('backlog')]
+
+# Recalculate bottlenecks only using execution stages
+in_progress_df['max_stage_duration'] = in_progress_df[execution_stage_cols].max(axis=1)
+in_progress_df['bottleneck_stage'] = in_progress_df[execution_stage_cols].idxmax(axis=1)
 in_progress_df['label'] = in_progress_df['Issue key'] + '\n' + in_progress_df['bottleneck_stage']
 
-# Select top 5 tasks with the longest delays
+# Get top 5 longest delays
 top5 = in_progress_df.sort_values('max_stage_duration', ascending=False).head(5)
 
-# Plot the results
-plt.figure(figsize=(9, 5))
+# Plot
+plt.figure(figsize=(10, 6))
 bars = plt.bar(top5['label'], top5['max_stage_duration'], color='firebrick')
 
-# Add average line across all tasks
+# Average line
 avg = in_progress_df['max_stage_duration'].mean()
 plt.axhline(avg, color='darkgreen', linestyle='--', label=f'Avg Max Duration: {avg:.1f}d')
 
-# Annotate durations above each bar
+# Label durations above each bar
 for bar, days in zip(bars, top5['max_stage_duration']):
     x = bar.get_x() + bar.get_width() / 2
     y = bar.get_height()
     plt.text(x, y + 1, f'{days:.1f}d', ha='center', va='bottom', fontsize=9)
 
-# Final chart formatting
-plt.title('PI 25.1 Bottleneck Analysis (Filtered)')
+# Final formatting
+plt.title('PI 25.1 Bottleneck Analysis (Execution Stages Only)')
 plt.ylabel('Max Stage Duration (days)')
 plt.xticks(rotation=45)
 plt.grid(axis='y', linestyle='--', alpha=0.5)
