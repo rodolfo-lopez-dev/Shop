@@ -1,31 +1,32 @@
-
 df['First_In_Progress'] = pd.to_datetime(df['First_In_Progress'])
 df['Done'] = pd.to_datetime(df['Done'])
+
+# Filter to tasks that entered in-progress
 in_progress_df = df[df['First_In_Progress'].notna()].copy()
 
-# Convert durations to numeric
+# Convert stage durations to numeric
 in_progress_df[stage_cols] = in_progress_df[stage_cols].apply(pd.to_numeric, errors='coerce')
 
-# Exclude instant-closed tasks
+# Exclude tasks completed instantly (same-minute Done and First_In_Progress)
 instant_closed = (in_progress_df['Done'] - in_progress_df['First_In_Progress']).dt.total_seconds().abs() < 60
 in_progress_df.loc[instant_closed, stage_cols] = np.nan
 
-# Exclude backlog transitions
+# Exclude "Backlog to ..." transitions
 execution_stage_cols = [col for col in stage_cols if not col.lower().startswith('backlog')]
 
-# Calculate bottleneck
+# Find longest stage per task
 in_progress_df['max_stage_duration'] = in_progress_df[execution_stage_cols].max(axis=1)
 in_progress_df['bottleneck_stage'] = in_progress_df[execution_stage_cols].idxmax(axis=1)
-in_progress_df['label'] = in_progress_df['Issue key'] + ' → ' + in_progress_df['bottleneck_stage']
+in_progress_df['label'] = in_progress_df['bottleneck_stage'] + '\n' + in_progress_df['Issue key']
 
-# Top 5 longest delays
+# Get top 5 longest delays
 top5 = in_progress_df.sort_values('max_stage_duration', ascending=False).head(5)
 
 # Plot
 plt.figure(figsize=(10, 6))
 bars = plt.barh(top5['label'], top5['max_stage_duration'], color='firebrick')
 
-# Add average reference line
+# Add average duration line
 avg = in_progress_df['max_stage_duration'].mean()
 plt.axvline(avg, color='darkgreen', linestyle='--', label=f'Avg Max Duration: {avg:.1f}d')
 
@@ -35,9 +36,10 @@ for bar, days in zip(bars, top5['max_stage_duration']):
     y = bar.get_y() + bar.get_height() / 2
     plt.text(x + 0.8, y, f'{days:.1f}d', va='center', fontsize=9)
 
+# Final formatting
 plt.title('PI 25.1 Bottleneck Analysis: Longest Stage Delays')
 plt.xlabel('Max Stage Duration (days)')
-plt.ylabel('Task → Stage')
+plt.ylabel('Stage\nTask')
 plt.legend()
 plt.tight_layout()
 plt.show()
