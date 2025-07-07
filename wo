@@ -1,9 +1,10 @@
+# STEP 1: Build Monthly Focus Summary
 monthly_focus = []
 
 for month_name, (start_date, end_date) in month_windows.items():
     df_completed = df[
         df['Done'].notna() &
-        (df['Done'] >= start_date) & 
+        (df['Done'] >= start_date) &
         (df['Done'] <= end_date)
     ]
 
@@ -23,6 +24,16 @@ for month_name, (start_date, end_date) in month_windows.items():
     })
 
 focus_df = pd.DataFrame(monthly_focus).set_index('Month')
+
+# Ensure correct index type and order to avoid warning
+focus_df.index = pd.CategoricalIndex(
+    focus_df.index,
+    categories=['Apr', 'May', 'Jun'],
+    ordered=True,
+    name='Month'
+)
+
+# Add total + average
 focus_df['Total_Completed'] = focus_df['Completed_OnTime'] + focus_df['Completed_Carryover']
 avg_completed = focus_df['Total_Completed'].mean()
 
@@ -35,14 +46,14 @@ ax = focus_df[['Completed_OnTime', 'Completed_Carryover']].plot(
     title='PI 25.1 Completed Story Points – On-Time vs Carryover'
 )
 
-# % carryover label above bar
+# Carryover % label above bars
 for idx, row in enumerate(focus_df.itertuples()):
     total = row.Completed_OnTime + row.Completed_Carryover
     if total > 0:
         pct = row.Completed_Carryover / total * 100
         ax.text(idx, total + 1, f'{pct:.0f}%', ha='center', fontsize=9, color='gray')
 
-# Actual story points inside each block
+# Story point labels inside bars
 for idx, row in focus_df.iterrows():
     if row.Completed_OnTime > 0:
         ax.text(idx, row.Completed_OnTime / 2, f"{int(row.Completed_OnTime)}", ha='center', va='center', color='white', fontsize=10)
@@ -53,6 +64,7 @@ for idx, row in focus_df.iterrows():
 ax.axhline(avg_completed, color='darkgreen', linestyle='--', linewidth=2,
            label=f'Avg Completed SP: {avg_completed:.1f}')
 
+# Final formatting
 plt.ylabel('Story Points')
 plt.xlabel('Month')
 plt.xticks(rotation=0, fontsize=11)
