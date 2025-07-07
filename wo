@@ -1,45 +1,57 @@
-df['First_In_Progress'] = pd.to_datetime(df['First_In_Progress'])
-df['Done'] = pd.to_datetime(df['Done'])
+# Step 1: Generate focus data
+monthly_focus = []
 
-# Filter to tasks that entered in-progress
-in_progress_df = df[df['First_In_Progress'].notna()].copy()
+for month_name, (start_date, end_date) in month_windows.items():
+    df_completed = df[
+        df['Done'].notna() &
+        (df['Done'] >= start_date) & 
+        (df['Done'] <= end_date)
+    ]
 
-# Convert stage durations to numeric
-in_progress_df[stage_cols] = in_progress_df[stage_cols].apply(pd.to_numeric, errors='coerce')
+    completed_on_time = df_completed[
+        (df_completed['First_In_Progress'] >= start_date) &
+        (df_completed['First_In_Progress'] <= end_date)
+    ]['Story Points'].sum()
 
-# Exclude tasks completed instantly (same-minute Done and First_In_Progress)
-instant_closed = (in_progress_df['Done'] - in_progress_df['First_In_Progress']).dt.total_seconds().abs() < 60
-in_progress_df.loc[instant_closed, stage_cols] = np.nan
+    completed_carryover = df_completed[
+        df_completed['First_In_Progress'] < start_date
+    ]['Story Points'].sum()
 
-# Exclude "Backlog to ..." transitions
-execution_stage_cols = [col for col in stage_cols if not col.lower().startswith('backlog')]
+    monthly_focus.append({
+        'Month': month_name,
+        'Completed_OnTime': completed_on_time,
+        'Completed_Carryover': completed_carryover
+    })
 
-# Find longest stage per task
-in_progress_df['max_stage_duration'] = in_progress_df[execution_stage_cols].max(axis=1)
-in_progress_df['bottleneck_stage'] = in_progress_df[execution_stage_cols].idxmax(axis=1)
-in_progress_df['label'] = in_progress_df['bottleneck_stage'] + '\n' + in_progress_df['Issue key']
+focus_df = pd.DataFrame(monthly_focus).set_index('Month')
+focus_df['Total_Completed'] = focus_df['Completed_OnTime'] + focus_df['Completed_Carryover']
+avg_completed = focus_df['Total_Completed'].mean()
 
-# Get top 5 longest delays
-top5 = in_progress_df.sort_values('max_stage_duration', ascending=False).head(5)
+ax = focus_df[['Completed_OnTime', 'Completed_Carryover']].plot(
+    kind='bar',
+    stacked=True,
+    color=['navy', 'silver'],
+    edgecolor='black',
+    figsize=(10, 6),
+    title='PI 25.1 Completed Story Points – On-Time vs Carryover'
+)
 
-# Plot
-plt.figure(figsize=(10, 6))
-bars = plt.barh(top5['label'], top5['max_stage_duration'], color='firebrick')
+# Optional: Add % carryover label
+for idx, row in enumerate(focus_df.itertuples()):
+    total = row.Completed_OnTime + row.Completed_Carryover
+    if total > 0:
+        pct = row.Completed_Carryover / total * 100
+        ax.text(idx, total + 1, f'{pct:.0f}%', ha='center', fontsize=9, color='gray')
 
-# Add average duration line
-avg = in_progress_df['max_stage_duration'].mean()
-plt.axvline(avg, color='darkgreen', linestyle='--', label=f'Avg Max Duration: {avg:.1f}d')
+# Average line
+ax.axhline(avg_completed, color='darkgreen', linestyle='--', linewidth=2,
+           label=f'Avg Completed SP: {avg_completed:.1f}')
 
-# Add duration labels to the right of each bar
-for bar, days in zip(bars, top5['max_stage_duration']):
-    x = bar.get_width()
-    y = bar.get_y() + bar.get_height() / 2
-    plt.text(x + 0.8, y, f'{days:.1f}d', va='center', fontsize=9)
-
-# Final formatting
-plt.title('PI 25.1 Bottleneck Analysis: Longest Stage Delays')
-plt.xlabel('Max Stage Duration (days)')
-plt.ylabel('Stage\nTask')
+plt.ylabel('Story Points')
+plt.xlabel('Month')
+plt.xticks(rotation=0, fontsize=11)
+plt.yticks(fontsize=11)
 plt.legend()
 plt.tight_layout()
 plt.show()
+
