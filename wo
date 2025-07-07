@@ -1,4 +1,4 @@
-# STEP 1: Build Monthly Focus Summary
+# STEP 1: Monthly Focus Summary (same as your original)
 monthly_focus = []
 
 for month_name, (start_date, end_date) in month_windows.items():
@@ -23,22 +23,20 @@ for month_name, (start_date, end_date) in month_windows.items():
         'Completed_Carryover': completed_carryover
     })
 
-focus_df = pd.DataFrame(monthly_focus).set_index('Month')
+# STEP 2: Convert to DataFrame and fix categorical order
+focus_df = pd.DataFrame(monthly_focus)
+focus_df['Month'] = pd.Categorical(focus_df['Month'], categories=['Apr', 'May', 'Jun'], ordered=True)
+focus_df = focus_df.sort_values('Month')  # Ensures correct order for plotting
 
-# Ensure correct index type and order to avoid warning
-focus_df.index = pd.CategoricalIndex(
-    focus_df.index,
-    categories=['Apr', 'May', 'Jun'],
-    ordered=True,
-    name='Month'
-)
-
-# Add total + average
+# Add Total and Average
 focus_df['Total_Completed'] = focus_df['Completed_OnTime'] + focus_df['Completed_Carryover']
 avg_completed = focus_df['Total_Completed'].mean()
 
-ax = focus_df[['Completed_OnTime', 'Completed_Carryover']].plot(
+# Plot stacked bars
+ax = focus_df.plot(
     kind='bar',
+    x='Month',
+    y=['Completed_OnTime', 'Completed_Carryover'],
     stacked=True,
     color=['navy', 'silver'],
     edgecolor='black',
@@ -46,21 +44,21 @@ ax = focus_df[['Completed_OnTime', 'Completed_Carryover']].plot(
     title='PI 25.1 Completed Story Points – On-Time vs Carryover'
 )
 
-# Carryover % label above bars
-for idx, row in enumerate(focus_df.itertuples()):
-    total = row.Completed_OnTime + row.Completed_Carryover
+# Add % Carryover label above bars
+for idx, row in focus_df.iterrows():
+    total = row['Completed_OnTime'] + row['Completed_Carryover']
     if total > 0:
-        pct = row.Completed_Carryover / total * 100
+        pct = row['Completed_Carryover'] / total * 100
         ax.text(idx, total + 1, f'{pct:.0f}%', ha='center', fontsize=9, color='gray')
 
-# Story point labels inside bars
+# Add story point labels inside each block
 for idx, row in focus_df.iterrows():
-    if row.Completed_OnTime > 0:
-        ax.text(idx, row.Completed_OnTime / 2, f"{int(row.Completed_OnTime)}", ha='center', va='center', color='white', fontsize=10)
-    if row.Completed_Carryover > 0:
-        ax.text(idx, row.Completed_OnTime + (row.Completed_Carryover / 2), f"{int(row.Completed_Carryover)}", ha='center', va='center', color='black', fontsize=10)
+    if row['Completed_OnTime'] > 0:
+        ax.text(idx, row['Completed_OnTime'] / 2, f"{int(row['Completed_OnTime'])}", ha='center', va='center', color='white', fontsize=10)
+    if row['Completed_Carryover'] > 0:
+        ax.text(idx, row['Completed_OnTime'] + (row['Completed_Carryover'] / 2), f"{int(row['Completed_Carryover'])}", ha='center', va='center', color='black', fontsize=10)
 
-# Average line
+# Add average horizontal line
 ax.axhline(avg_completed, color='darkgreen', linestyle='--', linewidth=2,
            label=f'Avg Completed SP: {avg_completed:.1f}')
 
